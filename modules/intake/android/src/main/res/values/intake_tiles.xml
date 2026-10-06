@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="intake_tile_scan_pay">Scan and pay</string>
+    <string name="intake_tile_add_purchase">Add purchase</string>
+    <string name="intake_widget_description">Scan and pay, or add a purchase, in one tap</string>
+</resources>

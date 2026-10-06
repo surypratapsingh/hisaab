@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Hisaab",
+    "slug": "money-os",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "scheme": "moneyos",
+    "android": {
+      "package": "com.surya.moneyos",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0F7A55",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.surya.moneyos"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Hisaab uses Face ID to keep your finances private."
+        }
+      ],
+      "./plugins/withShareTarget",
+      "./plugins/withShortcuts",
+      "./plugins/withHardening",
+      "./plugins/withReleaseSigning",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false
+        }
+      ]
+    ]
+  }
+}

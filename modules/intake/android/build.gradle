@@ -1,0 +1,25 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.intake'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.intake"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // Google ML Kit text recognition with the Latin model bundled into the app:
+  // bill photos are read on the phone, with no download and no upload.
+  implementation 'com.google.mlkit:text-recognition:16.0.1'
+
+  // Google's code scanner: a payment QR is scanned in Play services' own screen, which needs no
+  // camera permission in Money OS and hands back only the text of the code.
+  implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+}

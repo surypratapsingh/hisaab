@@ -1,0 +1,52 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Asks Play services to fetch the code scanner when the app is installed, so the first scan works offline. -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
+        <!-- Lets the phone's camera app write one picture into a private cache folder of ours. Not exported. -->
+        <provider
+            android:name="expo.modules.intake.CaptureFileProvider"
+            android:authorities="${applicationId}.capture"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/intake_capture_paths" />
+        </provider>
+        <!-- Quick Settings tile (FormTiles.kt). Exported so the system can bind it; only the system holds BIND_QUICK_SETTINGS_TILE. -->
+        <service
+            android:name="expo.modules.intake.ScanPayTile"
+            android:exported="true"
+            android:icon="@drawable/intake_tile_scan"
+            android:label="@string/intake_tile_scan_pay"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <!-- Quick Settings tile (FormTiles.kt). Exported so the system can bind it; only the system holds BIND_QUICK_SETTINGS_TILE. -->
+        <service
+            android:name="expo.modules.intake.AddPurchaseTile"
+            android:exported="true"
+            android:icon="@drawable/intake_tile_purchase"
+            android:label="@string/intake_tile_add_purchase"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <!-- Home-screen widget (QuickWidget.kt). Exported so the launcher can place it; it only draws two buttons. -->
+        <receiver
+            android:name="expo.modules.intake.QuickWidget"
+            android:exported="true"
+            android:label="Hisaab">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/intake_quick_widget" />
+        </receiver>
+    </application>
+</manifest>
