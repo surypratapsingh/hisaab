@@ -382,4 +382,5 @@ money-os/
 
 **Built:** 18 Sept 2026  
 **Author:** Surya  
+**License:** MIT (see LICENSE)  
 **Phase:** 1.1 (Foundation)
