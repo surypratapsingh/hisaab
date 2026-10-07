@@ -13,11 +13,11 @@ import {
 
 export type ExportFormat = 'json' | 'csv';
 
-/** Version 2 added products, purchases and consumption; version 3 statement balances and settings; version 4 CAS holdings; version 5 budgets, goals and recurring reminders; version 6 product brands; version 7 budget rollover; version 8 accounts left out of totals. */
-export const BACKUP_VERSION = 8;
+/** Version 2 added products, purchases and consumption; version 3 statement balances and settings; version 4 CAS holdings; version 5 budgets, goals and recurring reminders; version 6 product brands; version 7 budget rollover; version 8 accounts left out of totals; version 9 the messages and statements each entry came from. */
+export const BACKUP_VERSION = 9;
 
 /** Every version this build can restore. Older backups simply lack newer sections. */
-const READABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8];
+const READABLE_VERSIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 export type BackupMetadata = {
   version: number;
@@ -63,6 +63,7 @@ type BackupPayload = {
   budgets?: unknown[];
   goals?: unknown[];
   recurringItems?: unknown[];
+  rawRecords?: unknown[];
 };
 
 /**
@@ -100,12 +101,15 @@ const collect = (db: Database): Result<BackupPayload, BackupError> => {
   );
 
   const inventory = inventoryRows(db);
-  const statementRows = db.query<{ ref: string; entry_id: string }>(
-    `SELECT ref, entry_id FROM statement_rows`
+  const statementRows = db.query<{ ref: string; entry_id: string; raw_id: string | null }>(
+    `SELECT ref, entry_id, raw_id FROM statement_rows`
   );
-  const anchors = db.query<{ account_id: string; as_of: string; balance: number }>(
-    `SELECT account_id, as_of, balance FROM balance_anchors`
+  const anchors = db.query<{ account_id: string; as_of: string; balance: number; raw_id: string | null }>(
+    `SELECT account_id, as_of, balance, raw_id FROM balance_anchors`
   );
+  // The messages and statements entries came from: without them a restored ledger cannot tell a
+  // bank entry from a typed one ("Counted twice?", deleting a typed entry, imported statements).
+  const rawRecords = db.query(`SELECT * FROM raw_records`);
   const holdings = db.query(`SELECT * FROM holdings`);
   const settings = db.query<{ key: string; value: string }>(`SELECT key, value FROM settings`);
   const budgets = db.query(`SELECT * FROM budgets`);
@@ -118,7 +122,8 @@ const collect = (db: Database): Result<BackupPayload, BackupError> => {
     holdings.isErr() ||
     budgets.isErr() ||
     goals.isErr() ||
-    recurringItems.isErr()
+    recurringItems.isErr() ||
+    rawRecords.isErr()
   ) {
     return err({ code: 'EXPORT_FAILED', message: 'Could not read the ledger' });
   }
@@ -140,17 +145,20 @@ const collect = (db: Database): Result<BackupPayload, BackupError> => {
     statementRows: statementRows.value.map((row) => ({
       ref: row.ref,
       entryId: row.entry_id,
+      rawId: row.raw_id,
     })),
     balanceAnchors: anchors.value.map((row) => ({
       accountId: row.account_id,
       asOf: row.as_of,
       balance: row.balance,
+      rawId: row.raw_id,
     })),
     settings: settings.value,
     holdings: holdings.value,
     budgets: budgets.value,
     goals: goals.value,
     recurringItems: recurringItems.value,
+    rawRecords: rawRecords.value,
   });
 };
 
@@ -294,6 +302,18 @@ export const importBackup = (
 
   // All or nothing: a restore that fails halfway leaves the database as it was.
   const restored = db.transaction(() => {
+    // Before the entries that point at them. A backup before version 9 has none, so its links are dropped.
+    const rawIds = new Set<string>();
+    for (const raw of (payload.rawRecords ?? []) as Array<Record<string, string | null>>) {
+      write(
+        `INSERT OR REPLACE INTO raw_records (id, source, source_ref, payload, parser, parsed_at, parse_error, ingested_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [raw.id, raw.source, raw.source_ref, raw.payload, raw.parser, raw.parsed_at, raw.parse_error, raw.ingested_at] as Array<string | null>
+      );
+      rawIds.add(raw.id as string);
+    }
+    const link = (id: unknown): string | null => (typeof id === 'string' && rawIds.has(id) ? id : null);
+
     for (const account of payload.accounts as Array<Record<string, string | boolean | undefined>>) {
       write(
         `INSERT OR REPLACE INTO accounts (id, name, kind, subkind, last4, institution, is_system, archived_at, created_at, excluded)
@@ -352,7 +372,7 @@ export const importBackup = (
           entry.occurredAt as string,
           (entry.postedAt as string) ?? null,
           entry.description as string,
-          null,
+          link(entry.rawId),
           (entry.merchantId as string) ?? null,
           (entry.categoryId as string) ?? null,
           entry.kind as string,
@@ -413,19 +433,19 @@ export const importBackup = (
       );
     }
 
-    // Raw statement text is not part of a backup, so the link back to it is
-    // dropped; the row identity itself is what stops a re-import duplicating.
+    // The row identity is what stops a re-import duplicating; the link names the statement it came from.
     for (const row of (payload.statementRows ?? []) as Row[]) {
-      write(`INSERT OR REPLACE INTO statement_rows (ref, entry_id, raw_id) VALUES (?, ?, NULL)`, [
+      write(`INSERT OR REPLACE INTO statement_rows (ref, entry_id, raw_id) VALUES (?, ?, ?)`, [
         row.ref as string,
         row.entryId as string,
+        link(row.rawId),
       ]);
     }
 
     for (const row of (payload.balanceAnchors ?? []) as Row[]) {
       write(
-        `INSERT OR REPLACE INTO balance_anchors (account_id, as_of, balance, raw_id) VALUES (?, ?, ?, NULL)`,
-        [row.accountId as string, row.asOf as string, row.balance as number]
+        `INSERT OR REPLACE INTO balance_anchors (account_id, as_of, balance, raw_id) VALUES (?, ?, ?, ?)`,
+        [row.accountId as string, row.asOf as string, row.balance as number, link(row.rawId)]
       );
     }
 
@@ -433,9 +453,10 @@ export const importBackup = (
       write(
         `INSERT OR REPLACE INTO holdings (id, raw_id, account_id, as_of, source, kind, name, isin, folio,
                                           units_milli, nav_x10000, value, cost)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           row.id as string,
+          link(row.raw_id),
           row.account_id as string,
           row.as_of as string,
           row.source as string,

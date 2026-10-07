@@ -11,7 +11,10 @@ import {
 } from './backup';
 import { Database, type Account } from '@/db/client';
 import { NodeSqliteDriver } from '@/db/drivers/node';
-import { importStatement } from '@/repo/import';
+import { importStatement, statementImports } from '@/repo/import';
+import { ingestAlert } from '@/capture/ingest';
+import { cashAccount, recordTransaction } from '@/repo/manual';
+import { maybeTwice } from '@/repo/doubles';
 import { format, paise } from '@/money/money';
 import type { Id } from '@/lib/ulid';
 import {
@@ -300,7 +303,7 @@ describe('item history survives a backup', () => {
     const older = JSON.parse(exportLedger(db).getOrNull()!.data);
     db.close();
 
-    for (const section of ['products', 'purchases', 'consumption', 'statementRows']) {
+    for (const section of ['products', 'purchases', 'consumption', 'statementRows', 'rawRecords']) {
       delete older[section];
     }
 
@@ -347,6 +350,34 @@ describe('item history survives a backup', () => {
     expect(format(balance)).toBe('Rs 5,73,699.50');
     expect(fresh.getSetting('payday_day').getOrNull()).toBe('1');
 
+    fresh.close();
+  });
+
+  it('keeps where each entry came from, so its checks still work after a restore', () => {
+    const { db } = populated();
+    const alert = ingestAlert(db, {
+      app: 'com.google.android.apps.messaging',
+      text: 'Rs.450.00 debited from a/c **1234 on 25-09-26 to VPA swiggy@icici (UPI Ref No 526812345678).',
+      postedAt: '2026-09-25T10:00:00+05:30',
+    });
+    expect(alert.getOrNull()?.status).toBe('recorded');
+    const typed = recordTransaction(db, {
+      kind: 'expense',
+      amount: paise(45000),
+      accountId: cashAccount(db).getOrNull()!.id,
+      description: 'Dinner',
+      occurredAt: '2026-09-26',
+    }).getOrNull()!;
+    const backup = exportLedger(db).getOrNull()!;
+    db.close();
+
+    const fresh = new Database(new NodeSqliteDriver());
+    fresh.initialize();
+    expect(importBackup(fresh, backup.data).isOk()).toBe(true);
+
+    expect(maybeTwice(fresh)).toHaveLength(1);
+    expect(statementImports(fresh)).toHaveLength(1);
+    expect(fresh.deleteEntry(typed.id).isOk()).toBe(true);
     fresh.close();
   });
 

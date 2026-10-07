@@ -61,7 +61,9 @@ or shared file.
    `android/app/build.gradle` for every build given out after the first.
    Then check the APK: `apksigner verify --print-certs app-release.apk` must not show `fac61745…`.
    Not yet compiled with a real key. Because the signature changes,
-   Android will not update in place. Safe order: (1) take an encrypted backup in the app and check
+   Android will not update in place. Safe order: (1) take an encrypted backup in the app (with the
+   code from 2026-10-07 on, backup version 9, so each entry keeps the message or statement it came
+   from; an older backup restores the money but not those links) and check
    the file opens on the Restore screen's passphrase step; (2) build the release APK with the new
    key; (3) uninstall the development app; (4) install the release APK; (5) Restore from the backup
    (product photos are not in backups and would have to be added again).
