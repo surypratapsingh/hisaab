@@ -83,8 +83,9 @@ npm test
 
 983 tests across 65 files at the time of writing. The tests use `node:sqlite`, so they
 need **Node 22 or newer** (the CI workflow in `.github/workflows/ci.yml` uses 22).
-`npm run typecheck` must also be clean. Two tests assert wall-clock budgets (5,000 rows
-imported in under 3 s, a 5 s encryption cap) and can fail on a heavily loaded machine.
+`npm run typecheck` must also be clean. Three tests assert wall-clock budgets (10,000 entries
+walked in 200 ms, 5,000 rows imported in 3 s, backup encryption in 5 s) and can fail on a
+heavily loaded machine; run them alone if they do.
 
 **Golden tests:**
 - Expense transaction (bank debit, category credit)
