@@ -173,7 +173,7 @@ Tab bar: **Home | Activity | + | Reports | More**, plus stacked screens.
 3. **Data Deletion** — One control, confirm twice with "DELETE ALL" phrase, irreversible
 4. **Migration Harness** — Database schema versioning (`SCHEMA_VERSION`), additive migrations
 5. **Crash Safety** — Imports run in transaction, mid-crash leaves no half-state
-6. **Backup Validation** — Checksums, format validation before import
+6. **Backup Validation** — Format and version checks before import, all-or-nothing restore. Encrypted backups are authenticated (AES-256-GCM). Exports record a checksum in their metadata, but a restore does not check it.
 
 **Files:** `src/security/`
 - `applock.ts` — Biometric setup and verification
