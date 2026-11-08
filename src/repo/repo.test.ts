@@ -189,6 +189,24 @@ describe('import service', () => {
     expect(db.getEntries({ limit: 500 }).getOrNull()).toHaveLength(12);
   });
 
+  it('keeps two identical rows in one statement: two same withdrawals on a day are two payments', () => {
+    const text = statement([
+      '2026-09-25,2026-09-25,10000.00,,90000.00,ATM WDL SYNTHETIC BRANCH',
+      '2026-09-25,2026-09-25,10000.00,,80000.00,ATM WDL SYNTHETIC BRANCH',
+    ]);
+
+    const first = runImport(text).getOrNull()!;
+    expect(first.rowsParsed).toBe(2);
+    expect(first.duplicatesSkipped).toBe(0);
+    expect(db.getEntries({ limit: 500 }).getOrNull()).toHaveLength(2);
+
+    // Importing the same file again adds nothing, for both rows.
+    const second = runImport(text).getOrNull()!;
+    expect(second.rowsParsed).toBe(0);
+    expect(second.duplicatesSkipped).toBe(2);
+    expect(db.getEntries({ limit: 500 }).getOrNull()).toHaveLength(2);
+  });
+
   it('replays stored text without the user re-uploading', () => {
     runImport(fixture('hdfc_sample.csv'));
     const rawId = db.getEntries().getOrNull()![0].rawId!;

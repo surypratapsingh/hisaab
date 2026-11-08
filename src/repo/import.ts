@@ -163,7 +163,8 @@ const postRows = (
   ownAccounts: Array<{ last4: string; id: string }>
 ): ImportResult => {
   const learned = learnedPatterns(db);
-  const seen = new Set<string>();
+  // How many times each identical row has appeared in this file so far.
+  const seen = new Map<string, number>();
 
   let created = 0;
   let duplicates = 0;
@@ -171,12 +172,12 @@ const postRows = (
   let failed = 0;
 
   for (const row of rows) {
+    // Two identical rows in one statement (two Rs 10,000 withdrawals the same day) are two
+    // payments: the nth gets its own identity, so neither is lost and a re-import still
+    // finds both.
     const hash = rowHash(row);
-    if (seen.has(hash)) {
-      duplicates++;
-      continue;
-    }
-    seen.add(hash);
+    const occurrence = (seen.get(hash) ?? 0) + 1;
+    seen.set(hash, occurrence);
 
     const isDebit = row.debit !== undefined;
     const amount: Paise = row.debit ?? row.credit ?? paise(0);
@@ -185,7 +186,7 @@ const postRows = (
 
     // Re-importing the same statement must add nothing, so a row already in
     // the ledger is skipped before any work is done on it.
-    const ref = statementRef(account.id, row, sourceDelta);
+    const ref = statementRef(account.id, row, sourceDelta) + (occurrence > 1 ? `|#${occurrence}` : '');
     const known = db.findStatementRow(ref);
     if (known.isOk() && known.value !== null) {
       duplicates++;
@@ -194,8 +195,11 @@ const postRows = (
 
     // Entries imported before rows were recorded by identity are still found
     // by their narration, and get their identity backfilled on the way.
-    const legacy = db.findDuplicateEntry(account.id, row.date, row.narration, sourceDelta);
-    if (legacy.isOk() && legacy.value !== null) {
+    // Only the first of several identical rows can be an old entry: the older import
+    // dropped the others.
+    const legacy =
+      occurrence === 1 ? db.findDuplicateEntry(account.id, row.date, row.narration, sourceDelta) : null;
+    if (legacy?.isOk() && legacy.value !== null) {
       db.recordStatementRow(ref, legacy.value, rawId);
       duplicates++;
       continue;
