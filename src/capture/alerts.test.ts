@@ -176,3 +176,32 @@ describe('more bank formats (synthetic samples)', () => {
     expect(found.reference).toBe('526800009999');
   });
 });
+
+describe('alerts that look like transactions but are not, or the reverse (synthetic)', () => {
+  it('ignores an upcoming auto-debit notice', () => {
+    expect(parseAlert(sms('UPI mandate: Rs 199.00 will be auto-debited on 05-10-26 for SPOTIFY.'))).toBeNull();
+  });
+
+  it('reads a cash deposit as a credit', () => {
+    const found = parseAlert(sms('Cash deposit of Rs 10,000 at ATM to a/c XX1234 on 25-09-26. Avl Bal Rs 20,000'))!;
+    expect(found.direction).toBe('credit');
+    expect(format(found.amount)).toBe('Rs 10,000.00');
+    expect(found.cashWithdrawal).toBe(false);
+  });
+
+  it('reads money credited back after a failed UPI payment as a credit', () => {
+    const found = parseAlert(sms('Reversal: Rs 450.00 credited back to a/c XX1234 for failed UPI txn. Ref 526800010101'))!;
+    expect(found.direction).toBe('credit');
+    expect(found.reference).toBe('526800010101');
+  });
+
+  it('still ignores a declined card payment', () => {
+    expect(parseAlert(sms('Txn of INR 799.00 on Card XX1234 at AMAZON PAY declined due to insufficient funds'))).toBeNull();
+  });
+
+  it('reads the HDFC "UPI-<payee>-<vpa>-<ref>" form', () => {
+    const found = parseAlert(sms('Rs 99 debited from a/c XX1234 on 25-09-26 UPI-Zomato Ltd-zomato@hdfcbank-526800010202'))!;
+    expect(found.counterparty).toBe('Zomato Ltd');
+    expect(found.reference).toBe('526800010202');
+  });
+});

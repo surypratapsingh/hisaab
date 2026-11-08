@@ -37,8 +37,9 @@ export type ParsedAlert = {
 const NOT_A_TRANSACTION = [
   /\bOTP\b|one[\s-]time password|verification code/i,
   /pre-?approved|eligible for|offer|cashback of up to|apply now|loan of/i,
-  /will be (debited|deducted)|is due|due (on|by|date)|payment reminder|bill of .* generated/i,
-  /\b(failed|declined|unsuccessful|could not be processed)\b/i,
+  /will be (auto[\s-]?)?(debited|deducted)|is due|due (on|by|date)|payment reminder|bill of .* generated/i,
+  // A failed payment whose money came back ("credited back") is a real credit.
+  /^(?!.*\bcredited back\b).*\b(failed|declined|unsuccessful|could not be processed)\b/i,
   /requested (money|rs|inr|₹)|collect request|has requested/i,
   /\bmandate\b.*\b(created|registered|set ?up)\b/i,
 ];
@@ -51,7 +52,7 @@ const BARE_AMOUNT = /\b(?:debited|credited)\s+(?:by|for|with)\s+([\d,]+(?:\.\d{1
 const OWN_ACCOUNT = String.raw`(?:your\s+|my\s+)?(?:a\/c|acct|account|ac)\b`;
 // "transferred to your a/c" is money arriving; "transferred from a/c … to X" is money leaving.
 const DEBIT = new RegExp(String.raw`\b(debited|spent|paid|sent|withdrawn|withdrawal|purchase|transferred to(?!\s+${OWN_ACCOUNT})|transferred from\s+${OWN_ACCOUNT}|dr\.?)\b`, 'i');
-const CREDIT = new RegExp(String.raw`\b(credited|received|deposited|refund(ed)?|reversed|transferred to\s+${OWN_ACCOUNT}|cr\.?)\b`, 'i');
+const CREDIT = new RegExp(String.raw`\b(credited|received|deposit(?:ed)?|refund(ed)?|reversed|transferred to\s+${OWN_ACCOUNT}|cr\.?)\b`, 'i');
 
 // SBI prints six digits ("Acc No. XXXXX987702"); the last four are the ones
 // the user knows, so a longer run is cut to its last four.
@@ -72,6 +73,8 @@ const REFERENCE = /\b(?:utr|ref(?:erence)?(?:\s*no)?|rrn|upi(?:\s*ref)?(?:\s*no)
 const CASH = /\batm\b|cash withdrawal|\bwdl\b|withdrawn\b/i;
 
 const COUNTERPARTY: RegExp[] = [
+  // HDFC: "UPI-Zomato Ltd-zomato@hdfcbank-526800010202".
+  /\bupi-(.+?)-[\w.-]+@\w+-\d{9,22}\b/i,
   // Union Bank: "by Mob Bk ref no …, Fvg: GOPAL Avl Bal" (favouring).
   /\bfvg[:\s]+(.+?)(?=\s+(?:avl|avbl)\b|[.;,]|$)/i,
   /\bto (?:vpa\s+)?([\w.-]+@\w+)/i,
@@ -127,7 +130,7 @@ export const parseAlert = (alert: CapturedAlert): ParsedAlert | null => {
     direction,
     accountDigits: digitsOf(text.match(ACCOUNT)?.[1]),
     counterparty,
-    reference: text.match(REFERENCE)?.[1],
+    reference: text.match(REFERENCE)?.[1] ?? text.match(/\bupi-.+?-[\w.-]+@\w+-(\d{9,22})\b/i)?.[1],
     balance: balanceMatch ? money(balanceMatch[1]) : undefined,
     cashWithdrawal: direction === 'debit' && CASH.test(text),
   };
