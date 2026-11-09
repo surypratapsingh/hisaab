@@ -189,8 +189,7 @@ Tab bar: **Home | Activity | + | Reports | More**, plus stacked screens.
 
 *Updated 2026-10-03.* 2.2 Subscriptions and bills, 2.3 Safe-to-Spend and 2.4 Insights
 are done; 2.1 the notification listener is built and still being checked on real alerts.
-3.1 CAS import and 3.2 net worth are done. [plan.md](plan.md) has the checklist and
-[progress.md](progress.md) what happened last.
+3.1 CAS import and 3.2 net worth are done.
 
 ## Decision Log
 

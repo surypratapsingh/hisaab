@@ -105,3 +105,103 @@ describe('reading bank and UPI alerts', () => {
     expect(parseAlert(sms(text))).toBeNull();
   });
 });
+
+describe('more bank formats (synthetic samples)', () => {
+  it('reads an Axis UPI debit: reference and merchant sit in "UPI/P2M/<ref>/<merchant>"', () => {
+    const found = parseAlert(
+      sms('INR 1,500.00 debited from A/c no. XX4321 on 25-09-26 14:22:10 UPI/P2M/526800001111/ZOMATO. Not you? SMS BLOCK UPI to 18001035577 -Axis Bank')
+    )!;
+    expect(format(found.amount)).toBe('Rs 1,500.00');
+    expect(found.direction).toBe('debit');
+    expect(found.accountDigits).toBe('4321');
+    expect(found.reference).toBe('526800001111');
+    expect(found.counterparty).toBe('ZOMATO');
+  });
+
+  it('reads a Kotak "Sent" alert whose payee is a lowercase UPI id', () => {
+    const found = parseAlert(
+      sms('Sent Rs.200.00 from Kotak Bank AC X4321 to merchant@ybl on 25-09-26.UPI Ref 526800002222.')
+    )!;
+    expect(found.direction).toBe('debit');
+    expect(found.counterparty).toBe('merchant@ybl');
+    expect(found.reference).toBe('526800002222');
+  });
+
+  it('keeps "Rs.12000.00" out of the counterparty on an IMPS credit', () => {
+    const found = parseAlert(
+      sms('Your a/c no. XXXXXXXX1234 is credited by Rs.12000.00 on 25-09-26 by a/c linked to mobile 98XXXXX210 (IMPS Ref no 526800006666)')
+    )!;
+    expect(found.direction).toBe('credit');
+    expect(format(found.amount)).toBe('Rs 12,000.00');
+    expect(found.counterparty).toBeUndefined();
+    expect(found.reference).toBe('526800006666');
+  });
+
+  it('reads a NEFT sent from the account as a debit with the UTR', () => {
+    const found = parseAlert(
+      sms('Rs 1,00,000 transferred from A/c XX1234 to Rahul via NEFT. UTR HDFCN52026092512345')
+    )!;
+    expect(found.direction).toBe('debit');
+    expect(format(found.amount)).toBe('Rs 1,00,000.00');
+    expect(found.reference).toBe('HDFCN52026092512345');
+  });
+
+  it('reads money transferred to the user\'s own account as a credit', () => {
+    const found = parseAlert(sms('Rs 5,000 transferred to your a/c XX1234 on 25-09-26 from Priya Nair. UPI Ref 526800008888'))!;
+    expect(found.direction).toBe('credit');
+    expect(found.counterparty).toBe('Priya Nair');
+  });
+
+  it('reads an "INR" card purchase without taking the available limit for a balance', () => {
+    const found = parseAlert(
+      sms('INR 2,450.00 spent on ICICI Bank Card XX3456 on 25-Sep-26 at MYNTRA. Avl Limit: INR 1,00,000.00')
+    )!;
+    expect(format(found.amount)).toBe('Rs 2,450.00');
+    expect(found.counterparty).toBe('MYNTRA');
+    expect(found.balance).toBeUndefined();
+  });
+
+  it('reads a "Dr" debit with its balance', () => {
+    const found = parseAlert(sms('A/c XX1234 Dr Rs.1,200.00 on 25-09-26 UPI/526800004444. Avl Bal Rs.10,000.50'))!;
+    expect(found.direction).toBe('debit');
+    expect(format(found.balance!)).toBe('Rs 10,000.50');
+    expect(found.reference).toBe('526800004444');
+  });
+
+  it('ignores a bank safety footer that mentions OTP', () => {
+    const found = parseAlert(
+      sms('Rs.450.00 debited from a/c **1234 on 25-09-26 to VPA shop@icici (UPI Ref No 526800009999). Never share OTP/PIN with anyone.')
+    )!;
+    expect(found.direction).toBe('debit');
+    expect(found.reference).toBe('526800009999');
+  });
+});
+
+describe('alerts that look like transactions but are not, or the reverse (synthetic)', () => {
+  it('ignores an upcoming auto-debit notice', () => {
+    expect(parseAlert(sms('UPI mandate: Rs 199.00 will be auto-debited on 05-10-26 for SPOTIFY.'))).toBeNull();
+  });
+
+  it('reads a cash deposit as a credit', () => {
+    const found = parseAlert(sms('Cash deposit of Rs 10,000 at ATM to a/c XX1234 on 25-09-26. Avl Bal Rs 20,000'))!;
+    expect(found.direction).toBe('credit');
+    expect(format(found.amount)).toBe('Rs 10,000.00');
+    expect(found.cashWithdrawal).toBe(false);
+  });
+
+  it('reads money credited back after a failed UPI payment as a credit', () => {
+    const found = parseAlert(sms('Reversal: Rs 450.00 credited back to a/c XX1234 for failed UPI txn. Ref 526800010101'))!;
+    expect(found.direction).toBe('credit');
+    expect(found.reference).toBe('526800010101');
+  });
+
+  it('still ignores a declined card payment', () => {
+    expect(parseAlert(sms('Txn of INR 799.00 on Card XX1234 at AMAZON PAY declined due to insufficient funds'))).toBeNull();
+  });
+
+  it('reads the HDFC "UPI-<payee>-<vpa>-<ref>" form', () => {
+    const found = parseAlert(sms('Rs 99 debited from a/c XX1234 on 25-09-26 UPI-Zomato Ltd-zomato@hdfcbank-526800010202'))!;
+    expect(found.counterparty).toBe('Zomato Ltd');
+    expect(found.reference).toBe('526800010202');
+  });
+});
