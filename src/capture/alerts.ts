@@ -48,8 +48,10 @@ const AMOUNT = /(?:rs|inr|₹)\s*[.:]?\s*([\d,]+(?:\.\d{1,2})?)/i;
 // SBI's UPI alerts leave the currency out: "A/C X5678 debited by 299.0".
 const BARE_AMOUNT = /\b(?:debited|credited)\s+(?:by|for|with)\s+([\d,]+(?:\.\d{1,2})?)\b/i;
 
-const DEBIT = /\b(debited|spent|paid|sent|withdrawn|withdrawal|purchase|transferred to|dr\.?)\b/i;
-const CREDIT = /\b(credited|received|deposited|refund(ed)?|reversed|cr\.?)\b/i;
+const OWN_ACCOUNT = String.raw`(?:your\s+|my\s+)?(?:a\/c|acct|account|ac)\b`;
+// "transferred to your a/c" is money arriving; "transferred from a/c … to X" is money leaving.
+const DEBIT = new RegExp(String.raw`\b(debited|spent|paid|sent|withdrawn|withdrawal|purchase|transferred to(?!\s+${OWN_ACCOUNT})|transferred from\s+${OWN_ACCOUNT}|dr\.?)\b`, 'i');
+const CREDIT = new RegExp(String.raw`\b(credited|received|deposited|refund(ed)?|reversed|transferred to\s+${OWN_ACCOUNT}|cr\.?)\b`, 'i');
 
 // SBI prints six digits ("Acc No. XXXXX987702"); the last four are the ones
 // the user knows, so a longer run is cut to its last four.
@@ -66,20 +68,22 @@ const digitsOf = (run: string | undefined): string | undefined =>
   run === undefined ? undefined : run.length > 4 ? run.slice(-4) : run;
 // A balance, never a card's "Avl Lmt": available credit is not money held.
 const BALANCE = /\b(?:avl|avbl|available|clr|closing)\.?\s*(?:bal|balance)\b[^\d]*?([\d,]+(?:\.\d{1,2})?)/i;
-const REFERENCE = /\b(?:utr|ref(?:erence)?(?:\s*no)?|rrn|upi(?:\s*ref)?(?:\s*no)?|txn\s*id)[\s:.#-]*([A-Z0-9]{9,22})\b/i;
+const REFERENCE = /\b(?:utr|ref(?:erence)?(?:\s*no)?|rrn|upi(?:\s*ref)?(?:\s*no)?|txn\s*id)[\s:.#/-]*(?:p2[mp]\/)?([A-Z0-9]{9,22})\b/i;
 const CASH = /\batm\b|cash withdrawal|\bwdl\b|withdrawn\b/i;
 
 const COUNTERPARTY: RegExp[] = [
   // Union Bank: "by Mob Bk ref no …, Fvg: GOPAL Avl Bal" (favouring).
   /\bfvg[:\s]+(.+?)(?=\s+(?:avl|avbl)\b|[.;,]|$)/i,
-  /\bto vpa\s+([\w.@-]+)/i,
+  /\bto (?:vpa\s+)?([\w.-]+@\w+)/i,
+  // Axis: "UPI/P2M/526800001111/ZOMATO."
+  /\bupi\/p2[mp]\/\d+\/([^/.]+?)(?=\.|\s+not\b|$)/i,
   /\b(?:paid|sent|transferred)\s+(?:(?:rs\.?|inr|₹)\s*[\d,.]+\s+)?to\s+(.+?)(?=\s+(?:on|ref|via|using|from|upi|\()|[.;,]|$)/i,
   /\btrf to\s+(.+?)(?=\s+(?:on|ref|refno)|[.;,]|$)/i,
   /;\s*(.+?)\s+credited\b/i,
   /\b(?:[Aa]t|[Tt]o)\s+([A-Z][A-Z0-9 &'.-]{2,40}?)(?=\s+(?:on|On|ref|Ref|via|using|\()|[.;,]|$)/,
   /\bfrom\s+(?!(?:your\s+)?(?:a\/c|acct|account|ac)\b)(.+?)(?=\s+(?:on|ref|via|\()|[.;,]|$)/i,
   // "by Mob Bk" is Union Bank's name for its own app, not who paid.
-  /\bby\s+(?!(?:your\s+)?(?:a\/c|acct|account)\b|mob\s*bk\b)(.+?)(?=\s+(?:on|ref|\()|[.;,]|$)/i,
+  /\bby\s+(?!(?:your\s+)?(?:a\/c|acct|account)\b|mob\s*bk\b|(?:rs|inr|₹))(.+?)(?=\s+(?:on|ref|\()|[.;,]|$)/i,
 ];
 
 const money = (raw: string): Paise | undefined => {
